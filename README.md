@@ -1,4 +1,5 @@
 Drift Happens
+
 A real-time dynamic segment management system that tracks precise customer membership changes and propagates them across dependent services.
 
 What It Does
