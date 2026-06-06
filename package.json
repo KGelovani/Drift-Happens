@@ -1,0 +1,21 @@
+{
+  "name": "drift-happens",
+  "version": "1.0.0",
+  "description": "Dynamic Segment Management System with Delta Detection and Change Propagation",
+  "license": "MIT",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend",
+    "simulator"
+  ],
+  "scripts": {
+    "install-all": "yarn install",
+    "dev": "docker-compose -f docker-compose.yml up",
+    "dev:detach": "docker-compose -f docker-compose.yml up -d",
+    "down": "docker-compose -f docker-compose.yml down",
+    "logs": "docker-compose logs -f",
+    "db:seed": "docker-compose exec api npm run seed",
+    "db:migrate": "docker-compose exec api npm run typeorm:run:migrations"
+  }
+}

@@ -1,0 +1,138 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: drift-postgres
+    environment:
+      POSTGRES_USER: drift_user
+      POSTGRES_PASSWORD: drift_password
+      POSTGRES_DB: drift_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres-init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U drift_user -d drift_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - drift-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: drift-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - drift-network
+
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    container_name: drift-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin123
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - drift-network
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.9.0
+    container_name: drift-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+    ports:
+      - "9200:9200"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - drift-network
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: drift-api
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://drift_user:drift_password@postgres:5432/drift_db
+      - REDIS_URL=redis://redis:6379
+      - RABBITMQ_URL=amqp://admin:admin123@rabbitmq:5672
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - AMQP_HOST=rabbitmq
+      - AMQP_USER=admin
+      - AMQP_PASSWORD=admin123
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    volumes:
+      - ./backend/src:/app/src
+    networks:
+      - drift-network
+
+  ui:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: drift-ui
+    ports:
+      - "4200:4200"
+    environment:
+      - API_URL=http://api:3000
+    depends_on:
+      - api
+    volumes:
+      - ./frontend/src:/app/src
+    networks:
+      - drift-network
+
+  simulator:
+    build:
+      context: ./simulator
+      dockerfile: Dockerfile
+    container_name: drift-simulator
+    environment:
+      - NODE_ENV=development
+      - API_URL=http://api:3000
+      - RABBITMQ_URL=amqp://admin:admin123@rabbitmq:5672
+    depends_on:
+      - api
+      - rabbitmq
+    volumes:
+      - ./simulator/src:/app/src
+    networks:
+      - drift-network
+
+volumes:
+  postgres_data:
+
+networks:
+  drift-network:
+    driver: bridge
